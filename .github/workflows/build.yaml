@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
   id-token: write
   packages: write
 
@@ -25,13 +25,22 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - uses: docker/setup-buildx-action@v3
+
       - id: vars
         shell: bash
         run: |
-          VERSION="$(sed -n 's/FROM .*postgresql:\(16.3\)$/\1/p' Dockerfile)"
+          BASE_IMAGE="$(sed -n '1s/FROM \(.*\)$/\1/p' Dockerfile)"
+          VERSION="$(echo "$BASE_IMAGE" | sed -n 's/.*postgresql:\(.*\)$/\1/p' Dockerfile)"
+          echo "base_image=$BASE_IMAGE" >> $GITHUB_OUTPUT
           echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "final_image=ghcr.io/dn0/cloudnative-pg-timescaledb:$VERSION" >> $GITHUB_OUTPUT
 
-      - uses: docker/setup-buildx-action@v3
+          PG_MAJOR="${VERSION%%.*}"
+          echo "pg_major=$PG_MAJOR" >> $GITHUB_OUTPUT
+          docker image pull "${BASE_IMAGE}"
+          PG_VERSION="$(docker image inspect --format '{{ index .Config.Labels "version"}}' "${BASE_IMAGE}")"
+          echo "pg_version=$PG_VERSION" >> $GITHUB_OUTPUT
 
       - uses: docker/build-push-action@v6
         with:
@@ -43,4 +52,32 @@ jobs:
           tags: |
             ghcr.io/dn0/cloudnative-pg-timescaledb:${{ steps.vars.outputs.version }}
             ghcr.io/dn0/cloudnative-pg-timescaledb:latest
+          labels: |
+            version=${{ steps.vars.outputs.pg_version }}
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.licenses=Apache-2.0
+            org.opencontainers.image.description=This Docker image contains PostgreSQL, Barman Cloud, and TimescaleDB extension
 
+      - id: summary
+        shell: bash
+        run: |
+          TS_VERSION="$(docker run --entrypoint=bash --rm "${{ steps.vars.outputs.final_image }}" -c 'dpkg-query -W -f "\${Version}" timescaledb-2-postgresql-${{ steps.vars.outputs.pg_major }}')"
+          TSTK_VERSION="$(docker run --entrypoint=bash --rm "${{ steps.vars.outputs.final_image }}" -c 'dpkg-query -W -f "\${Version}" timescaledb-tools')"
+
+          {
+            echo "## :whale: Latest version"
+            echo ""
+            echo "|                                              |                                               |"
+            echo "| :------------------------------------------- | :-------------------------------------------- |"
+            echo "| :inbox_tray: Base image                      | \`${{ steps.vars.outputs.base_image }}\`      |"
+            echo "|  :heavy_plus_sign: PostgreSQL version        | \`${{ steps.vars.outputs.pg_version }}\`      |"
+            echo "|  :heavy_plus_sign: Timescale version         | \`${TS_VERSION}\`                             |"
+            echo "|  :heavy_plus_sign: Timescale Toolkit version | \`${TSTK_VERSION}\`                           |"
+            echo "| :outbox_tray: **Final image**                | **\`${{ steps.vars.outputs.final_image }}\`** |"
+            echo ""
+          } | tee README.md >> $GITHUB_STEP_SUMMARY
+
+          git config user.name "${GITHUB_ACTOR}"
+          git config user.email "${GITHUB_ACTOR}@users.noreply.github.com"
+          git commit -m ":rocket: release ${{ steps.vars.outputs.version }}" README.md
+          git push
