@@ -27,7 +27,8 @@ jobs:
 
       - uses: docker/setup-buildx-action@v3
 
-      - id: vars
+      - name: vars
+        id: vars
         shell: bash
         run: |
           BASE_IMAGE="$(sed -n '1s/FROM \(.*\)$/\1/p' Dockerfile)"
@@ -42,7 +43,8 @@ jobs:
           PG_VERSION="$(docker image inspect --format '{{ index .Config.Labels "version"}}' "${BASE_IMAGE}")"
           echo "pg_version=$PG_VERSION" >> $GITHUB_OUTPUT
 
-      - uses: docker/build-push-action@v6
+      - name: docker-build-and-push
+        uses: docker/build-push-action@v6
         with:
           push: true
           platforms: linux/amd64
@@ -58,7 +60,8 @@ jobs:
             org.opencontainers.image.licenses=Apache-2.0
             org.opencontainers.image.description=This Docker image contains PostgreSQL, Barman Cloud, and TimescaleDB extension
 
-      - id: summary
+      - name: summary
+        id: summary
         shell: bash
         run: |
           TS_VERSION="$(docker run --entrypoint=bash --rm "${{ steps.vars.outputs.final_image }}" -c 'dpkg-query -W -f "\${Version}" timescaledb-2-postgresql-${{ steps.vars.outputs.pg_major }}')"
@@ -79,5 +82,12 @@ jobs:
 
           git config user.name "${GITHUB_ACTOR}"
           git config user.email "${GITHUB_ACTOR}@users.noreply.github.com"
-          git commit -m ":rocket: release ${{ steps.vars.outputs.version }}" README.md
-          git push
+
+          if git diff --exit-code README.md > /dev/null; then
+            echo "::notice:: No new release"
+          else
+            echo "::notice:: New release: ${{ steps.vars.outputs.version }}"
+            git commit -m ":rocket: release ${{ steps.vars.outputs.version }}" README.md
+            git push
+          fi
+
