@@ -31,8 +31,8 @@ jobs:
         id: vars
         shell: bash
         run: |
-          BASE_IMAGE="$(sed -n '1s/FROM \(.*\)$/\1/p' Dockerfile)"
-          VERSION="$(echo "$BASE_IMAGE" | sed -n 's/.*postgresql:\(.*\)$/\1/p' Dockerfile)"
+          BASE_IMAGE="$(sed -n '1s/FROM \(.*\)$/\1/p' Dockerfile | cut -d '@' -f 1)"
+          VERSION="$(echo "$BASE_IMAGE" | sed -n 's/.*postgresql:\(.*\)$/\1/p')"
           echo "base_image=$BASE_IMAGE" >> $GITHUB_OUTPUT
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "final_image=ghcr.io/dn0/cloudnative-pg-timescaledb:$VERSION" >> $GITHUB_OUTPUT

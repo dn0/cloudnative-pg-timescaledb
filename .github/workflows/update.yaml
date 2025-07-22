@@ -1,0 +1,41 @@
+name: update
+
+on:
+  schedule:
+    - cron: '30 4 * * 0'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  id-token: write
+
+jobs:
+  dockerfile:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: vars
+        id: vars
+        shell: bash
+        run: |
+          NEW_IMAGE=$(curl -fsSLm5 https://raw.githubusercontent.com/cloudnative-pg/postgres-containers/refs/heads/main/Debian/ClusterImageCatalog-bookworm.yaml | yq -r '.spec.images[] | select(.major==17) | .image')
+          echo "::debug::new_image=$NEW_IMAGE"
+          [[ -z "$NEW_IMAGE" ]] && exit 1
+          sed -i'' -e "s|^FROM\ .*$|FROM\ ${NEW_IMAGE}|" Dockerfile
+
+          BASE_IMAGE="$(sed -n '1s/FROM \(.*\)$/\1/p' Dockerfile | cut -d '@' -f 1)"
+          VERSION="$(echo "$BASE_IMAGE" | sed -n 's/.*postgresql:\(.*\)$/\1/p')"
+          [[ -z "$VERSION" ]] && exit 2 
+
+          git config user.name "${GITHUB_ACTOR}"
+          git config user.email "${GITHUB_ACTOR}@users.noreply.github.com"
+
+          if git diff --exit-code Dockerfile > /dev/null; then
+            echo "::notice:: No new image version"
+          else
+            echo "::notice:: New image version: ${VERSION}"
+            git commit -m ":seedling: update to ${VERSION}" Dockerfile
+            git push
+          fi
+
