@@ -1,4 +1,4 @@
-FROM ghcr.io/cloudnative-pg/postgresql:17.11-202608310816-system-bookworm@sha256:d0e93a6fb034e97067733ea2febe701dd97a070011c82d5fdabe99ca84b1f3d4
+FROM ghcr.io/cloudnative-pg/postgresql:17.11-202609140816-system-bookworm@sha256:b5c87e7420a8f651b25861d716d50c1e14d9e21b62f0dcac1e8e789c31b10025
 
 USER root
 
